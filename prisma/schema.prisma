@@ -1,0 +1,368 @@
+  generator client {
+  provider = "prisma-client-js"
+  output   = "../apps/api/node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  CREATOR
+  ADMIN
+}
+
+enum PlanTier {
+  FREE
+  GOOD
+  PRO
+  GOD
+}
+
+enum SongStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+model User {
+  id            String         @id @default(cuid())
+  clerkId       String?        @unique @map("clerk_id")
+  phone         String?        @unique
+  email         String?        @unique
+  displayName   String         @map("display_name")
+  avatarUrl     String?        @map("avatar_url")
+  bio           String?        @db.VarChar(500)
+  role          Role           @default(USER)
+  plan          PlanTier       @default(FREE)
+  planExpiresAt DateTime?      @map("plan_expires_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  songs         Song[]         @relation("CreatorSongs")
+  playlists     Playlist[]
+  likes         Like[]
+  listening     ListeningEvent[]
+  recentPlays   RecentPlay[]
+  refreshTokens RefreshToken[]
+  following        Follow[]       @relation("Following")
+  followers        Follow[]       @relation("Followers")
+  feedEvents       FeedEvent[]
+  hostedParties    PartyRoom[]    @relation("HostParties")
+  partyMemberships PartyMember[]  @relation("UserPartyMemberships")
+  payouts          Payout[]
+  downloads        Download[]
+  playbackErrors   PlaybackError[]
+  paymentOrders    PaymentOrder[]
+  pushSubscriptions PushSubscription[]
+  leaderboardEntries DailyLeaderboardEntry[]
+  trophies           UserTrophy[]
+  @@map("users")
+}
+
+model PaymentOrder {
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
+  tier              PlanTier
+  amount            Int
+  currency          String    @default("INR") @db.VarChar(3)
+  razorpayOrderId   String    @unique @map("razorpay_order_id")
+  razorpayPaymentId String?   @unique @map("razorpay_payment_id")
+  verifiedAt        DateTime? @map("verified_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("payment_orders")
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  phone     String
+  codeHash  String   @map("code_hash")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([phone, expiresAt])
+  @@map("otp_codes")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Song {
+  id              String          @id @default(cuid())
+  creatorId       String          @map("creator_id")
+  title           String
+  artistName      String          @map("artist_name")
+  album           String?
+  genre           String
+  tags            String[]        @default([])
+  durationSeconds Int?            @map("duration_seconds")
+  masterAudioKey  String?         @map("master_audio_key")
+  hlsMasterKey    String?         @map("hls_master_key")
+  coverArtKey     String?         @map("cover_art_key")
+  playCount       BigInt          @default(0) @map("play_count")
+  likeCount       Int             @default(0) @map("like_count")
+  isPublished     Boolean         @default(false) @map("is_published")
+  isExclusive     Boolean         @default(false) @map("is_exclusive")
+  tierRequired    PlanTier        @default(FREE) @map("tier_required")
+  status          SongStatus      @default(PROCESSING)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  creator         User            @relation("CreatorSongs", fields: [creatorId], references: [id], onDelete: Cascade)
+  playlistSongs   PlaylistSong[]
+  likes           Like[]
+  listening       ListeningEvent[]
+  recentPlays     RecentPlay[]
+  feedEvents      FeedEvent[]
+  parties         PartyRoom[]
+  downloads       Download[]
+  playbackErrors  PlaybackError[]
+  @@index([creatorId, createdAt])
+  @@index([genre, isPublished])
+  @@index([isPublished, playCount(sort: Desc)])
+  @@map("songs")
+}
+
+model PlaybackError {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  songId     String   @map("song_id")
+  status     String   @db.VarChar(10)
+  errorCode  String?  @map("error_code") @db.VarChar(80)
+  bitrate    String?  @db.VarChar(10)
+  attempt    Int      @default(0)
+  bufferedMs Int?     @map("buffered_ms")
+  userAgent  String?  @map("user_agent") @db.VarChar(500)
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song       Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  @@index([songId, createdAt])
+  @@index([status, createdAt])
+  @@map("playback_errors")
+}
+
+model Playlist {
+  id          String         @id @default(cuid())
+  userId      String         @map("user_id")
+  name        String
+  description String?        @db.VarChar(500)
+  coverUrl    String?        @map("cover_url")
+  isMix       Boolean        @default(false) @map("is_mix")
+  mixSeed     Json?          @map("mix_seed")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  songs       PlaylistSong[]
+  feedEvents  FeedEvent[]
+  @@index([userId, updatedAt])
+  @@map("playlists")
+}
+
+model Download {
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")
+  songId           String   @map("song_id")
+  bitrate          String   @default("320k") @db.VarChar(10)
+  downloadedAt     DateTime @default(now()) @map("downloaded_at")
+  licenseExpiresAt DateTime @map("license_expires_at")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song             Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  @@unique([userId, songId])
+  @@index([userId, downloadedAt(sort: Desc)])
+  @@map("downloads")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+model PlaylistSong {
+  id         String   @id @default(cuid())
+  playlistId String   @map("playlist_id")
+  songId     String   @map("song_id")
+  position   Int
+  addedAt    DateTime @default(now()) @map("added_at")
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  song       Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  @@unique([playlistId, songId])
+  @@unique([playlistId, position])
+  @@index([songId])
+  @@map("playlist_songs")
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  songId    String   @map("song_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song      Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  @@unique([userId, songId])
+  @@index([songId, createdAt])
+  @@map("likes")
+}
+
+model ListeningEvent {
+  id                  String   @id @default(cuid())
+  userId              String   @map("user_id")
+  songId              String   @map("song_id")
+  playDurationSeconds Int      @map("play_duration_seconds")
+  completed           Boolean  @default(false)
+  createdAt           DateTime @default(now()) @map("created_at")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song                Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([songId, createdAt])
+  @@map("listening_events")
+}
+
+model RecentPlay {
+  id       String   @id @default(cuid())
+  userId   String   @map("user_id")
+  songId   String   @map("song_id")
+  playedAt DateTime @default(now()) @map("played_at")
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song     Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  @@index([userId, playedAt(sort: Desc)])
+  @@map("recent_plays")
+}
+
+enum FeedEventType {
+  LISTEN
+  NEW_SONG
+  LIKE
+  PLAYLIST
+}
+
+model Follow {
+  followerId String   @map("follower_id")
+  followeeId String   @map("followee_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  follower   User     @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  followee   User     @relation("Followers", fields: [followeeId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followeeId])
+  @@index([followeeId, createdAt(sort: Desc)], name: "idx_follows_followee")
+  @@map("follows")
+}
+
+model FeedEvent {
+  id         BigInt        @id @default(autoincrement())
+  actorId    String        @map("actor_id")
+  type       FeedEventType
+  songId     String?       @map("song_id")
+  playlistId String?       @map("playlist_id")
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  actor      User          @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  song       Song?         @relation(fields: [songId], references: [id], onDelete: Cascade)
+  playlist   Playlist?     @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt(sort: Desc)], name: "idx_feed_events_time")
+  @@index([actorId, createdAt(sort: Desc)], name: "idx_feed_events_actor")
+  @@map("feed_events")
+}
+
+model PartyRoom {
+  id         String        @id @default(cuid())
+  hostId     String        @map("host_id")
+  inviteCode String        @unique @map("invite_code")
+  songId     String?       @map("song_id")
+  positionS  Float         @default(0) @map("position_s")
+  isPlaying  Boolean       @default(false) @map("is_playing")
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  host       User          @relation("HostParties", fields: [hostId], references: [id], onDelete: Cascade)
+  song       Song?         @relation(fields: [songId], references: [id], onDelete: SetNull)
+  members    PartyMember[]
+
+  @@map("party_rooms")
+}
+
+model PartyMember {
+  partyId  String    @map("party_id")
+  userId   String    @map("user_id")
+  joinedAt DateTime  @default(now()) @map("joined_at")
+
+  party    PartyRoom @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  user     User      @relation("UserPartyMemberships", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([partyId, userId])
+  @@map("party_members")
+}
+
+model Payout {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  creatorId     String   @map("creator_id")
+  period        DateTime @db.Date
+  totalPlays    BigInt   @default(0) @map("total_plays")
+  premiumPlays  BigInt   @default(0) @map("premium_plays")
+  adRevenue     Decimal  @default(0) @map("ad_revenue") @db.Decimal(12, 2)
+  amount        Decimal  @default(0) @map("amount") @db.Decimal(12, 2)
+  status        String   @default("PENDING") @db.VarChar(10)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  creator       User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@unique([creatorId, period])
+  @@index([creatorId, period(sort: Desc)], name: "idx_payouts_creator")
+  @@map("payouts")
+}
+
+enum TrophyType {
+  GOLD
+  SILVER
+  BRONZE
+  MILESTONE_1M
+}
+
+model DailyLeaderboardEntry {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  date            DateTime @db.Date
+  points          Int      @default(0)
+  uniqueSongs     Int      @default(0) @map("unique_songs")
+  completedAtMs   BigInt?  @map("completed_at_ms")  // millis from midnight — lower = faster
+  rank            Int?                               // 1-10, set by midnight cron
+  trophy          TrophyType?                        // GOLD/SILVER/BRONZE for top 3
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([date, points(sort: Desc)], name: "idx_leaderboard_daily")
+  @@map("daily_leaderboard")
+}
+
+model UserTrophy {
+  id        String     @id @default(cuid())
+  userId    String     @map("user_id")
+  type      TrophyType
+  date      DateTime   @db.Date          // the day it was earned (or lifetime milestone date)
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)], name: "idx_user_trophies")
+  @@map("user_trophies")
+}

@@ -1,0 +1,16 @@
+{
+  "name": "Streamify",
+  "short_name": "Streamify",
+  "description": "Listen without limits. High fidelity music streaming with offline downloads and personalized mixes.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080808",
+  "theme_color": "#bef264",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

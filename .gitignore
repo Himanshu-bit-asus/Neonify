@@ -1,0 +1,11 @@
+node_modules
+.next
+.env*
+!.env.example
+coverage
+dist
+*.log
+*.tsbuildinfo
+neonifypassword.md
+services/ml/.venv
+services/ml/model/
