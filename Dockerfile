@@ -18,6 +18,7 @@ WORKDIR /app
 ENV NODE_ENV=production PORT=3000
 RUN useradd --system --uid 1001 nextjs
 COPY --from=builder --chown=nextjs:nextjs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nextjs /app/public ./public
 COPY --from=builder --chown=nextjs:nextjs /app/.next/static ./.next/static
 USER nextjs
 EXPOSE 3000
